@@ -1,12 +1,15 @@
 package network
 
 import (
+	"context"
 	tls "crypto/tls"
 	"io/ioutil"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/choria-io/go-choria/choria"
 	"github.com/choria-io/go-choria/srvcache"
 	gomock "github.com/golang/mock/gomock"
 	logrus "github.com/sirupsen/logrus"
@@ -14,6 +17,8 @@ import (
 	"github.com/choria-io/go-choria/config"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
+	nats "github.com/nats-io/nats.go"
 )
 
 func Test(t *testing.T) {
@@ -23,13 +28,14 @@ func Test(t *testing.T) {
 
 var _ = Describe("Network Broker", func() {
 	var (
-		mockctl *gomock.Controller
-		cfg     *config.Config
-		fw      *MockChoriaFramework
-		bi      *MockBuildInfoProvider
-		srv     *Server
-		err     error
-		logger  *logrus.Entry
+		mockctl   *gomock.Controller
+		cfg       *config.Config
+		clientcfg *config.Config
+		fw        *MockChoriaFramework
+		bi        *MockBuildInfoProvider
+		srv       *Server
+		err       error
+		logger    *logrus.Entry
 	)
 
 	BeforeEach(func() {
@@ -38,6 +44,8 @@ var _ = Describe("Network Broker", func() {
 		fw = NewMockChoriaFramework(mockctl)
 
 		cfg, err = config.NewDefaultConfig()
+		Expect(err).ToNot(HaveOccurred())
+		clientcfg, err = config.NewDefaultConfig()
 		Expect(err).ToNot(HaveOccurred())
 
 		cfg.Choria.SSLDir = "testdata/ssl"
@@ -101,6 +109,44 @@ var _ = Describe("Network Broker", func() {
 			Expect(srv.opts.TLSTimeout).To(Equal(float64(2)))
 			Expect(srv.opts.LeafNode.Host).To(Equal(""))
 			Expect(srv.opts.LeafNode.Port).To(Equal(0))
+		})
+
+		It("Should initialize the server, with TLS correctly", func() {
+			cfg.Choria.NetworkListenAddress = "localhost"
+			cfg.Choria.NetworkClientPort = -1
+			cfg.Choria.NetworkWriteDeadline = time.Duration(10 * time.Second)
+			cfg.LogLevel = "debug"
+			cfg.Choria.NetworkPeerPort = -1
+			cfg.Choria.FileSecurityCA = "../../../../../providers/security/testdata/intermediate/ca.pem"
+			cfg.Choria.FileSecurityCertificate = "../../../../../providers/security/testdata/intermediate/localhost.pem"
+			cfg.Choria.FileSecurityKey = "../../../../../providers/security/testdata/intermediate/localhost-key.pem"
+
+			clientcfg.Choria.FileSecurityCA = "../../providers/security/testdata/good/certs/ca.pem"
+			clientcfg.Choria.FileSecurityCertificate = "../../providers/security/testdata/good/certs/rip.mcollective.pem"
+			clientcfg.Choria.FileSecurityKey = "../../providers/security/testdata/good/private_keys/rip.mcollective.pem"
+
+			lfw, err := choria.NewWithConfig(cfg)
+			cfw, err := choria.NewWithConfig(clientcfg)
+
+			srv, err = NewServer(lfw, bi, false)
+			Expect(err).ToNot(HaveOccurred())
+
+			ctx, cancel := context.WithCancel(context.Background())
+
+			wg := sync.WaitGroup{}
+			wg.Add(1)
+			go srv.Start(ctx, &wg)
+			if !srv.gnatsd.ReadyForConnections(5 * time.Second) {
+				Fail("Broker didnt start")
+			}
+
+			tlsc, err := cfw.TLSConfig()
+			Expect(err).ToNot(HaveOccurred())
+			_, err = nats.Connect(srv.gnatsd.ClientURL(), nats.Secure(tlsc), nats.MaxReconnects(1))
+			Expect(err.Error()).ToNot(HaveOccurred())
+
+			cancel()
+
 		})
 
 		// It("Should support disabling TLS Verify", func() {
@@ -330,6 +376,7 @@ var _ = Describe("Network Broker", func() {
 				Expect(srv.opts.JetStream).To(BeTrue())
 				Expect(srv.opts.StoreDir).To(Equal(td))
 			})
+
 		})
 	})
 })

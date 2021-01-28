@@ -27,10 +27,20 @@ ca_chain:
 email:
 	cfssl genkey email.json | cfssljson -bare email.rip.mcollective
 	cfssl gencsr -key email.rip.mcollective-key.pem email.json  | cfssljson -bare email.rip.mcollective
-	cfssl sign -ca intermediate.pem -ca-key intermediate-key.pem email.rip.mcollective.csr subject.json | cfssljson -bare email.rip.mcollective && openssl x509 -in email.rip.mcollective.pem -noout -text
-	cat email.rip.mcollective.pem intermediate.pem > email-chain-rip.mcollective.pem
+	cfssl sign -ca intermediate.pem -ca-key intermediate-key.pem email.rip.mcollective.csr subject.json | cfssljson -bare email.rip.mcollective && openssl x509 -in localhost.pem -noout -text
+	cat localhost.pem intermediate.pem > email-chain-rip.mcollective.pem
 	openssl verify -CAfile ca.pem -untrusted email-chain-rip.mcollective.pem email-chain-rip.mcollective.pem
 	cp email-chain-rip.mcollective.pem certs/email-chain-rip.mcollective.pem
+
+localhost:
+	cfssl genkey localhost.json | cfssljson -bare localhost
+	cfssl gencsr -key localhost-key.pem localhost.json  | cfssljson -bare localhost
+	cfssl sign -ca intermediate.pem -ca-key intermediate-key.pem localhost.csr localhost.json | cfssljson -bare localhost && openssl x509 -in localhost.pem -noout -text
+	cat localhost.pem intermediate.pem > localhost-chain.pem
+	openssl verify -CAfile ca.pem -untrusted localhost-chain.pem localhost-chain.pem
+	cp localhost-chain.pem certs/localhost-chain.pem
+
+
 
 deploy:
 	cp ca.pem certs/ca.pem
