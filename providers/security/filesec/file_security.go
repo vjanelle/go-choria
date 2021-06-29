@@ -9,16 +9,20 @@ import (
 	"bytes"
 	"context"
 	"crypto"
+	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/asn1"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"math/big"
 	"net/http"
 	"net/url"
 	"os"
@@ -47,6 +51,12 @@ type FileSecurity struct {
 	log  *logrus.Entry
 
 	mu *sync.Mutex
+}
+
+// Represents the two mathematical components of an ECDSA signature once
+// decomposed.
+type ECDSASignature struct {
+	R, S *big.Int
 }
 
 // Config is the configuration for FileSecurity
@@ -317,13 +327,19 @@ func (s *FileSecurity) SignBytes(str []byte) ([]byte, error) {
 	switch t := parsedKey.(type) {
 	case *rsa.PrivateKey:
 		sig, err = rsa.SignPKCS1v15(rng, t, crypto.SHA256, hashed[:])
-		if err != nil {
-			err = fmt.Errorf("could not sign message: %s", err)
-		}
-		return sig, err
+	case *ecdsa.PrivateKey:
+		// opts not currently used
+		sig, err = t.Sign(rng, hashed[:], nil)
+	case *ed25519.PrivateKey:
+		sig, err = t.Sign(rng, hashed[:], crypto.SHA256)
 	default:
 		return sig, fmt.Errorf("unhandled key type %T", t)
 	}
+
+	if err != nil {
+		err = fmt.Errorf("could not sign message: %s", err)
+	}
+	return sig, err
 }
 
 // VerifyByteSignature verify that dat matches signature sig made by the key of identity
@@ -356,10 +372,25 @@ func (s *FileSecurity) VerifyByteSignature(dat []byte, sig []byte, identity stri
 		return false
 	}
 
-	rsaPublicKey := cert.PublicKey.(*rsa.PublicKey)
 	hashed := s.ChecksumBytes(dat)
 
-	err = rsa.VerifyPKCS1v15(rsaPublicKey, crypto.SHA256, hashed[:], sig)
+	switch pubkey := cert.PublicKey.(type) {
+	case *rsa.PublicKey:
+		err = rsa.VerifyPKCS1v15(pubkey, crypto.SHA256, hashed[:], sig)
+	case *ecdsa.PublicKey:
+		_sig := &ECDSASignature{}
+		_, err = asn1.Unmarshal(sig, _sig)
+		if err != nil {
+			s.log.Errorf("she blew up %v", err)
+		}
+		if ecdsa.Verify(pubkey, hashed[:], _sig.R, _sig.S) {
+			s.log.Debug("Woo")
+		}
+
+	default:
+		s.log.Errorf("%v not known", pubkey)
+	}
+
 	if err != nil {
 		s.log.Errorf("Signature verification using %s failed: %s", pubkeyPath, err)
 		return false
