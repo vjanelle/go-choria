@@ -59,6 +59,7 @@ func (d *{{ .ActionName | SnakeToCamel }}Result) RecordResult(output *{{ .Action
        d.rpcreplies = append(d.rpcreplies, reply)
 }
 
+
 func (d *{{ .ActionName | SnakeToCamel }}Result) RenderResults(w io.Writer, format RenderFormat, displayMode DisplayMode, verbose bool, silent bool, colorize bool, log Log) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -95,6 +96,12 @@ func (d *{{ .ActionName | SnakeToCamel }}Result) RenderResults(w io.Writer, form
 // Stats is the rpc request stats
 func (d *{{ .ActionName | SnakeToCamel }}Result) Stats() Stats {
 	return d.stats
+}
+
+// SetStats sets the rpc request stats
+func (d *{{ .ActionName | SnakeToCamel }}Result) SetStats(stats *rpcclient.Stats) *StatusResult {
+	d.stats = stats
+	return d
 }
 
 // ResultDetails is the details about the request
