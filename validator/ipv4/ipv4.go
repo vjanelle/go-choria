@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"net"
 	"reflect"
+
+	"github.com/choria-io/go-choria/validator/registry"
 )
 
 // ValidateString validates that the given string is an IPv4 address
@@ -28,4 +30,23 @@ func ValidateStructField(value reflect.Value, tag string) (bool, error) {
 	}
 
 	return ValidateString(value.String())
+}
+
+// ipv4Validator implements the registry.Validator interface
+type ipv4Validator struct{}
+
+func (v *ipv4Validator) Name() string {
+	return "IPv4"
+}
+
+func (v *ipv4Validator) Matches(tag string) bool {
+	return tag == "ipv4"
+}
+
+func (v *ipv4Validator) Validate(value reflect.Value, tag string) (bool, error) {
+	return ValidateStructField(value, tag)
+}
+
+func init() {
+	registry.Register(&ipv4Validator{})
 }

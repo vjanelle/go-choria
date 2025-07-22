@@ -15,14 +15,17 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/choria-io/go-choria/validator/duration"
-	"github.com/choria-io/go-choria/validator/enum"
-	"github.com/choria-io/go-choria/validator/ipaddress"
-	"github.com/choria-io/go-choria/validator/ipv4"
-	"github.com/choria-io/go-choria/validator/ipv6"
-	"github.com/choria-io/go-choria/validator/maxlength"
-	"github.com/choria-io/go-choria/validator/regex"
-	"github.com/choria-io/go-choria/validator/shellsafe"
+	"github.com/choria-io/go-choria/validator/registry"
+
+	// Import all validator subpackages to ensure their init() functions run
+	_ "github.com/choria-io/go-choria/validator/duration"
+	_ "github.com/choria-io/go-choria/validator/enum"
+	_ "github.com/choria-io/go-choria/validator/ipaddress"
+	_ "github.com/choria-io/go-choria/validator/ipv4"
+	_ "github.com/choria-io/go-choria/validator/ipv6"
+	_ "github.com/choria-io/go-choria/validator/maxlength"
+	_ "github.com/choria-io/go-choria/validator/regex"
+	_ "github.com/choria-io/go-choria/validator/shellsafe"
 )
 
 // ValidateStruct validates all keys in a struct using their validate tag
@@ -87,45 +90,17 @@ func validateStructField(valueField reflect.Value, typeField reflect.StructField
 		return nil
 	}
 
-	if validation == "shellsafe" {
-		if ok, err := shellsafe.ValidateStructField(valueField, validation); !ok {
-			return fmt.Errorf("%s shellsafe validation failed: %s", typeField.Name, err)
-		}
+	// Find a validator that matches this validation tag
+	validator := registry.FindValidator(validation)
+	if validator == nil {
+		// No validator found for this tag - silently ignore for backwards compatibility
+		return nil
+	}
 
-	} else if validation == "ipv4" {
-		if ok, err := ipv4.ValidateStructField(valueField, validation); !ok {
-			return fmt.Errorf("%s IPv4 validation failed: %s", typeField.Name, err)
-		}
-
-	} else if validation == "ipv6" {
-		if ok, err := ipv6.ValidateStructField(valueField, validation); !ok {
-			return fmt.Errorf("%s IPv6 validation failed: %s", typeField.Name, err)
-		}
-
-	} else if validation == "ipaddress" {
-		if ok, err := ipaddress.ValidateStructField(valueField, validation); !ok {
-			return fmt.Errorf("%s IP address validation failed: %s", typeField.Name, err)
-		}
-
-	} else if strings.HasPrefix(validation, "regex") {
-		if ok, err := regex.ValidateStructField(valueField, validation); !ok {
-			return fmt.Errorf("%s regular expression validation failed: %s", typeField.Name, err)
-		}
-
-	} else if strings.HasPrefix(validation, "maxlength") {
-		if ok, err := maxlength.ValidateStructField(valueField, validation); !ok {
-			return fmt.Errorf("%s maxlength validation failed: %s", typeField.Name, err)
-		}
-
-	} else if strings.HasPrefix(validation, "enum") {
-		if ok, err := enum.ValidateStructField(valueField, validation); !ok {
-			return fmt.Errorf("%s enum validation failed: %s", typeField.Name, err)
-		}
-
-	} else if strings.HasPrefix(validation, "duration") {
-		if ok, err := duration.ValidateStructField(valueField, validation); !ok {
-			return fmt.Errorf("%s duration validation failed: %s", typeField.Name, err)
-		}
+	// Run the validation
+	ok, err := validator.Validate(valueField, validation)
+	if !ok {
+		return fmt.Errorf("%s %s validation failed: %s", typeField.Name, validator.Name(), err)
 	}
 
 	return nil

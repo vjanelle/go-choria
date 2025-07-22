@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"strings"
+
+	"github.com/choria-io/go-choria/validator/registry"
 )
 
 // ValidateString validates that a string matches a regex
@@ -39,4 +42,23 @@ func ValidateStructField(value reflect.Value, tag string) (bool, error) {
 	}
 
 	return ValidateString(value.String(), parts[1])
+}
+
+// regexValidator implements the registry.Validator interface
+type regexValidator struct{}
+
+func (v *regexValidator) Name() string {
+	return "regular expression"
+}
+
+func (v *regexValidator) Matches(tag string) bool {
+	return strings.HasPrefix(tag, "regex=")
+}
+
+func (v *regexValidator) Validate(value reflect.Value, tag string) (bool, error) {
+	return ValidateStructField(value, tag)
+}
+
+func init() {
+	registry.Register(&regexValidator{})
 }

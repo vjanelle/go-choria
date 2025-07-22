@@ -9,6 +9,8 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+
+	"github.com/choria-io/go-choria/validator/registry"
 )
 
 // ValidateSlice validates that all items in target is one of valid
@@ -67,4 +69,23 @@ func ValidateStructField(value reflect.Value, tag string) (bool, error) {
 	default:
 		return false, fmt.Errorf("cannot valid data of type %s for enums", value.Kind().String())
 	}
+}
+
+// enumValidator implements the registry.Validator interface
+type enumValidator struct{}
+
+func (v *enumValidator) Name() string {
+	return "enum"
+}
+
+func (v *enumValidator) Matches(tag string) bool {
+	return strings.HasPrefix(tag, "enum=")
+}
+
+func (v *enumValidator) Validate(value reflect.Value, tag string) (bool, error) {
+	return ValidateStructField(value, tag)
+}
+
+func init() {
+	registry.Register(&enumValidator{})
 }

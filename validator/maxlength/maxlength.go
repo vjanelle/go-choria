@@ -9,6 +9,9 @@ import (
 	"reflect"
 	"regexp"
 	"strconv"
+	"strings"
+
+	"github.com/choria-io/go-choria/validator/registry"
 )
 
 // ValidateString validates that input is not longer than max
@@ -45,4 +48,23 @@ func ValidateStructField(value reflect.Value, tag string) (bool, error) {
 	default:
 		return false, fmt.Errorf("cannot check length of %s type", value.Kind().String())
 	}
+}
+
+// maxLengthValidator implements the registry.Validator interface
+type maxLengthValidator struct{}
+
+func (v *maxLengthValidator) Name() string {
+	return "maxlength"
+}
+
+func (v *maxLengthValidator) Matches(tag string) bool {
+	return strings.HasPrefix(tag, "maxlength=")
+}
+
+func (v *maxLengthValidator) Validate(value reflect.Value, tag string) (bool, error) {
+	return ValidateStructField(value, tag)
+}
+
+func init() {
+	registry.Register(&maxLengthValidator{})
 }

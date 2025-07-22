@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+
+	"github.com/choria-io/go-choria/validator/registry"
 )
 
 // Validate checks if a string is safe to use in a shell without any escapes or redirects
@@ -31,4 +33,23 @@ func ValidateStructField(value reflect.Value, tag string) (bool, error) {
 	}
 
 	return Validate(value.String())
+}
+
+// shellsafeValidator implements the registry.Validator interface
+type shellsafeValidator struct{}
+
+func (v *shellsafeValidator) Name() string {
+	return "shellsafe"
+}
+
+func (v *shellsafeValidator) Matches(tag string) bool {
+	return tag == "shellsafe"
+}
+
+func (v *shellsafeValidator) Validate(value reflect.Value, tag string) (bool, error) {
+	return ValidateStructField(value, tag)
+}
+
+func init() {
+	registry.Register(&shellsafeValidator{})
 }
